@@ -1,6 +1,5 @@
 <template>
   <div class="hello">
-  1txD0R34T5sdkMh9KJK0LpUqjjyIGP6_R
     <div style="margin-top: 1vh;">            
         <el-input placeholder="Please input folder id" v-model="input0" class="input-with-select">
             <template slot="prepend">
@@ -23,8 +22,8 @@
           :data="data"
           v-loading="loading"
           node-key="id"
+          empty-text="N/A"
           default-expand-all
-          @node-click="handleNodeClick"
           :expand-on-click-node="false"
         >
 
@@ -41,12 +40,24 @@
             <span><i class="el-icon-document" style="color:gray;"></i></span>
             <span>{{ node.label["itemcnt"] }}</span>
             <span>
-              <el-tooltip v-bind:content="node.label.URL" placement="top">
-                <i class="el-icon-view" v-on:click="handleViewClick(node)"></i>
-              </el-tooltip>
+              <el-popover
+                placement="right"
+                trigger="hover"
+                width="auto">
+                <span><i class="el-icon-edit-outline" v-on:click="handleCopyClick(node)" style="cursor : pointer;"></i></span>
+                <span>{{ node.label["URL"] }}</span>
+                <i class="el-icon-view" slot="reference" v-on:click="handleViewClick(node)"></i>
+              </el-popover>
             </span>
             <span v-if="node.label.isEpmty === true">
               <i class="el-icon-warning" style="color:red;"> Empty</i>
+            </span>
+            <span v-if="node.label.cells.length > 0">
+              <template v-for='cell in node.label.cells'>
+                <span :key="cell">
+                   <el-tag size="small" style='margin-right: 1%;'>{{cell.name}}</el-tag>
+                </span>
+              </template>
             </span>
           </template>
           <template v-else>
@@ -54,10 +65,22 @@
             <span>{{ node.label["Item Name"] }}</span>
             <span style='margin-right: 5%;'></span>
             <span>
-              <el-tooltip v-bind:content="node.label.URL" placement="top">
-                <i class="el-icon-view" v-on:click="handleViewClick(node)"></i>
-              </el-tooltip>
+              <el-popover
+                placement="right"
+                trigger="hover"
+                width="auto">
+                <span><i class="el-icon-edit-outline" v-on:click="handleCopyClick(node)" style="cursor : pointer;"></i></span>
+                <span>{{ node.label["URL"] }}</span>
+                <i class="el-icon-view" slot="reference" v-on:click="handleViewClick(node)"></i>
+              </el-popover>
             </span>
+            <span v-if="node.label.cells.length > 0">
+                          <template v-for='cell in node.label.cells'>
+                            <span :key="cell">
+                              <el-tag size="small" style='margin-right: 1%;'>{{cell.name}}</el-tag>
+                            </span>
+                          </template>
+                        </span>
           </template>
         </span>
         </el-tree>
@@ -70,31 +93,123 @@
 <script>
 import axios from 'axios'
 
+var re1 = /(?=https:\/\/drive.google.com\/open\?id=).*$/
+var re2 = /(?=https:\/\/drive\.google\.com\/drive\/folders\/).*$/
+var re3 = /(?=https:\/\/drive\.google\.com\/a\/mis\.doshisha\.ac\.jp\/file\/d\/).*(?=\/view\?)/
+var re4 = /(?=https:\/\/drive\.google\.com\/drive\/u\/0\/folders\/).*$/
+var re5 = /(?=https:\/\/docs\.google\.com\/spreadsheets\/d\/).*(?=\/edit)/
+var re6 = /(?=https:\/\/drive\.google\.com\/open\?id=).*$/
+var re7 = /(?=https:\/\/docs\.google\.com\/document\/d\/).*(?=\/edit)/
+
+function findSignature(url) {
+  var sig = -1
+  if(url.match(re1)){sig = url.match(re1)[0].replace(/https:\/\/drive.google.com\/open\?id=/,"")}
+  if(url.match(re2)){sig = url.match(re2)[0].replace(/https:\/\/drive\.google\.com\/drive\/folders\//,"")}
+  if(url.match(re3)){sig = url.match(re3)[0].replace(/https:\/\/drive\.google\.com\/a\/mis\.doshisha\.ac\.jp\/file\/d\//,"")}
+  if(url.match(re4)){sig = url.match(re4)[0].replace(/https:\/\/drive\.google\.com\/drive\/u\/0\/folders\//,"")}
+  if(url.match(re5)){sig = url.match(re5)[0].replace(/https:\/\/docs\.google\.com\/spreadsheets\/d\//,"")}
+  if(url.match(re6)){sig = url.match(re6)[0].replace(/https:\/\/drive\.google\.com\/open\?id=/,"")}
+  if(url.match(re7)){sig = url.match(re7)[0].replace(/https:\/\/docs\.google\.com\/document\/d\//,"")}
+  if(sig == -1) {console.log(url)}
+  return sig
+  // var match1 = url.match(/(?<=https:\/\/drive.google.com\/open\?id=).*$/);
+  // var match2 = url.match(/(?<=https:\/\/drive\.google\.com\/drive\/folders\/).*$/);
+  // var match3 = url.match(/(?<=https:\/\/drive\.google\.com\/a\/mis\.doshisha\.ac\.jp\/file\/d\/).*(?=\/view\?)/);
+  // var match4 = url.match(/(?<=https:\/\/drive\.google\.com\/drive\/u\/0\/folders\/).*$/);
+  // var match5 = url.match(/(?<=https:\/\/docs\.google\.com\/spreadsheets\/d\/).*(?=\/edit)/);
+  // var match6 = url.match(/(?<=https:\/\/drive\.google\.com\/open\?id=).*$/);  
+
+  // if(match1){return match1[0]}
+  // if(match2){return match2[0]}
+  // if(match3){return match3[0]}
+  // if(match4){return match4[0]}
+  // if(match5){return match5[0]}
+  // if(match6){return match6[0]}
+  // return -1
+}
+
+function findCellBySignature(_signature, sheet){
+  var cells = sheet.filter((cell) => {return cell.signature == _signature});
+  if(cells){return cells}
+  else {return null}
+}
+
+var cells_associated = []
+var cells_not_associated = []
+
+function associateCell(__data,__sheet, self){
+  if(!__data) return;
+  if(!__sheet) return;
+
+  var cells_associated = []
+  var cells_not_associated = []
+
+  var func = function associateCellRecursive(_data,sheet){
+    if(!_data) return;
+    if(! sheet) return;
+
+    for(var item of _data) {
+      var cells = findCellBySignature(item.label.signature, sheet);
+      item.label.cells = cells;
+      cells.forEach((c) => {cells_associated.push(c.signature)})
+      associateCellRecursive(item.children, sheet)
+    }
+    cells_not_associated = sheet.filter((c) => {return cells_associated.indexOf(c.signature) == -1})
+  }
+
+  func(__data,__sheet)
+  if(self)
+  {
+    if(cells_not_associated.length > 0)
+    {
+      var names = ''
+      cells_not_associated.forEach(v => {names = names + '\n・' + v.name})
+      const h = self.$createElement;
+      self.$notify({
+        title: cells_not_associated.length + ' unlinked files were detected.',
+        duration: 0,
+        dangerouslyUseHTMLString: true,
+        type: 'warning',
+        message: names
+      });
+    }
+  }
+
+  return {associated: cells_associated, not_associated: cells_not_associated}
+}
+
 function makeTreeStructure(tdata) {
   let self = {}
   let holder = []
   var foldercnt = 0
-  for(var item of tdata['child_folder']){
-    let childobj = makeTreeStructure(item['child'])
-    item.isFolder = true
-    item.foldercnt = childobj['foldercnt']
-    item.itemcnt = childobj['itemcnt']
-    
-    if(item.foldercnt + item.itemcnt == 0){
-      item.isEpmty = true
-    }else{
-      item.isEpmty = false
+  if (tdata['child_folder'])
+  {
+    for(var item of tdata['child_folder']){
+      let childobj = makeTreeStructure(item['child'])
+      item.isFolder = true
+      item.cells = []
+      item.signature = findSignature(item.URL)
+      item.foldercnt = childobj['foldercnt']
+      item.itemcnt = childobj['itemcnt']
+      
+      if(item.foldercnt + item.itemcnt == 0){
+        item.isEpmty = true
+      }else{
+        item.isEpmty = false
+      }
+      holder.push(
+        {
+          label: item
+          , children: childobj.holder
+        })
+      foldercnt++
     }
-    holder.push(
-      {
-        label: item
-        , children: childobj.holder
-      })
-    foldercnt++
   }
   var itemcnt = 0
   for(var item of tdata.items) {
     item.isFolder = false
+    item.cells = []
+    item.signature = findSignature(item.URL)
     holder.push({label: item})
     itemcnt++
   }
@@ -106,22 +221,12 @@ function makeTreeStructure(tdata) {
   return self;
 }
 
-function fetchTreeData(url) {
-  this.$jsonp(url).then(json => {
-          // Success.
-          console.log(json)
-          return makeTreeStructure(json).holder
-        }).catch(err => {
-          // Failed.
-          console.log(err)
-        });
-}
-
 export default {
   name: 'HelloWorld',
   data () {
     return {
-      data: [{label:"N/A"}],
+      data: [],
+      sheet: [],
       loading : false,
       input0: '',
       input1: '',
@@ -132,7 +237,6 @@ export default {
 
       },
       handleViewClick(data) {
-        console.log(data)
         var url = ""
         if(data.label.isFolder){
           url = data.label['URL'];
@@ -143,13 +247,47 @@ export default {
         window.open(url);
       },
       startSearch(event) {
-        var surl = 'https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbyoA-cfZH5dQRltGxIL1SNdiFg9DTRi57Zv81-K1qgP/dev?id=' + this.input0;
-    
+        var urls = this.input0.split("\,")
         this.loading = true;
-        this.$jsonp(surl).then(json => {
+
+        Promise.all(
+          urls.map((__url) => {return this.$jsonp('https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbyoA-cfZH5dQRltGxIL1SNdiFg9DTRi57Zv81-K1qgP/dev?id=' + findSignature(__url))})
+        ).then(msg => {console.log(msg);this.loading=false})
+
+        // Promise.resolve().then(
+        //   () => {
+        //     urls.forEach((__url) => {
+        //       console.log(__url)
+        //       var surl = 'https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbyoA-cfZH5dQRltGxIL1SNdiFg9DTRi57Zv81-K1qgP/dev?id=' + findSignature(__url)
+        //       this.$jsonp(surl).then(json => {
+        //         // Success.
+        //         var _tdata = makeTreeStructure(json);
+        //         console.log(_tdata)
+        //         return _tdata.holder
+        //       })
+        //       .catch(err => {
+        //         // Failed.
+        //         console.log(err)
+        //         return []
+        //       })
+        //     })
+        //   }
+        // ).then(
+        //   (msg) => {console.log(msg);this.loading = false}
+        // )
+      },
+      querySheet(event) {
+        var baseurl = 'https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbzwieN06w3RSngiNLxhQ6CCKepyKBYOpe1cwXhfhty4zk7wPJI/exec?id=' + findSignature(this.input1)
+        this.loading = true;
+        this.$jsonp(baseurl).then(json => {
               // Success.
-              console.log(json)
-              this.data = makeTreeStructure(json).holder
+              var result = json.map(item => 
+              { 
+                var _signature = findSignature(item.url)
+                return {type: item.type, name: item.name, url: item.url, signature: _signature};
+              });
+              this.sheet = result
+              associateCell(this.data,this.sheet,this)
               this.loading = false;
             }).catch(err => {
               // Failed.
@@ -157,19 +295,24 @@ export default {
               this.loading = false;
             })
       },
-      querySheet(event) {
-        var baseurl = 'https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbzwieN06w3RSngiNLxhQ6CCKepyKBYOpe1cwXhfhty4zk7wPJI/exec?id=' + this.input1;
-        this.loading = true;
-        this.$jsonp(baseurl).then(json => {
-              // Success.
-              console.log(json)
-              //this.data = makeTreeStructure(json).holder
-              this.loading = false;
-            }).catch(err => {
-              // Failed.
-              console.log(err)
-              this.loading = false;
-            })
+      handleCopyClick(data) {
+        const text = data.label['URL'];
+        const textarea = document.createElement('textarea');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = 0;
+        textarea.value = text;
+
+        document.body.appendChild(textarea);
+
+        textarea.select();
+        document.execCommand('Copy');
+
+        document.body.removeChild(textarea);
+
+        const h = this.$createElement;
+        this.$notify.info({
+          title: 'URL has been copied to clipboard.',
+        });
       }
     },
   created () {
@@ -195,3 +338,22 @@ a {
   color: #42b983;
 }
 </style>
+
+<style>
+  .el-tree-node__content:hover {
+    cursor: default !important;
+  }
+
+  .el-tree-node__content:hover {
+    cursor: default !important;
+  }
+
+  .el-icon-view {
+    cursor: pointer !important;
+  }
+
+  .el-icon-view:hover {
+    cursor: pointer !important;
+  }
+</style>
+

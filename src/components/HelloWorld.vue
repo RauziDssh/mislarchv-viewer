@@ -1,7 +1,7 @@
 <template>
   <div class="hello">
     <div style="margin-top: 1vh;">            
-        <el-input placeholder="Please input folder id" v-model="input0" class="input-with-select">
+        <el-input placeholder="Please input folder URL" v-model="input0" class="input-with-select">
             <template slot="prepend">
               <img src="../assets/drive-icon-gray.png" style="height: 50%; margin:auto;">
             </template>
@@ -9,7 +9,7 @@
         </el-input>
     </div>
     <div style="margin-top: 1vh;">            
-        <el-input placeholder="Please input spreadsheet id" v-model="input1" class="input-with-select">
+        <el-input placeholder="Please input spreadsheet URL" v-model="input1" class="input-with-select">
             <template slot="prepend">
               <img src="../assets/spreadsheet-icon-gray.png" style="height: 50%; margin:auto;">
             </template>
@@ -32,7 +32,7 @@
           <template v-if="node.label.isFolder === true">
             <span><i class="el-icon-goods"></i></span>
             <span>
-              {{ node.label["Folder Name"] }}
+              {{ node.label["FolderName"] }}
             </span>
             <span style='margin-right: 5%;'></span>
             <span><i class="el-icon-goods" style="color:gray;"></i></span>
@@ -62,7 +62,7 @@
           </template>
           <template v-else>
             <span><i class="el-icon-document"></i></span>
-            <span>{{ node.label["Item Name"] }}</span>
+            <span>{{ node.label["ItemName"] }}</span>
             <span style='margin-right: 5%;'></span>
             <span>
               <el-popover
@@ -142,7 +142,6 @@ function associateCell(__data,__sheet, self){
   if(!__sheet) return;
 
   var cells_associated = []
-  var cells_not_associated = []
 
   var func = function associateCellRecursive(_data,sheet){
     if(!_data) return;
@@ -154,24 +153,29 @@ function associateCell(__data,__sheet, self){
       cells.forEach((c) => {cells_associated.push(c.signature)})
       associateCellRecursive(item.children, sheet)
     }
-    cells_not_associated = sheet.filter((c) => {return cells_associated.indexOf(c.signature) == -1})
   }
-
+  
   func(__data,__sheet)
+  self.cells_not_associated = __sheet.filter((c) => {return cells_associated.indexOf(c.signature) == -1})
+
   if(self)
   {
-    if(cells_not_associated.length > 0)
+    console.log(self.cells_not_associated)
+    if(self.cells_not_associated.length > 0)
     {
-      var names = ''
-      cells_not_associated.forEach(v => {names = names + '\n・' + v.name})
+      var names = '<div style="height: 50vh; overflow-y: scroll;">'
+      self.cells_not_associated.forEach(v => {names = names + '<el-tag size="small">・'+ v.name + '<br></el-tag>'})
+      names = names + "</div>"
       const h = self.$createElement;
       self.$notify({
-        title: cells_not_associated.length + ' unlinked files were detected.',
+        title: self.cells_not_associated.length + ' unlinked files were detected.',
         duration: 0,
         dangerouslyUseHTMLString: true,
         type: 'warning',
+        datas: self.cells_not_associated,
+        useListings: true,
         message: names
-      });
+        });
     }
   }
 
@@ -217,6 +221,8 @@ function makeTreeStructure(tdata) {
   self['holder'] = holder
   self['itemcnt'] = itemcnt
   self['foldercnt'] = foldercnt
+  self.isFolder = true
+  self.FolderName = tdata.Foldername
 
   return self;
 }
@@ -230,6 +236,7 @@ export default {
       loading : false,
       input0: '',
       input1: '',
+      cells_not_associated:[],
     }
   },
   methods: {
@@ -252,7 +259,28 @@ export default {
 
         Promise.all(
           urls.map((__url) => {return this.$jsonp('https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbyoA-cfZH5dQRltGxIL1SNdiFg9DTRi57Zv81-K1qgP/dev?id=' + findSignature(__url))})
-        ).then(msg => {console.log(msg);this.loading=false})
+        ).then(msg => 
+        {
+          this.loading=false
+          var _datas = msg.filter(v => {return v != null}).map(v => {return makeTreeStructure(v).holder})
+          _datas.forEach(v => 
+          {
+            v.forEach(x => {this.data.push(x)})
+          })
+          associateCell(this.data,this.sheet,this)
+        }).catch(err => 
+          {
+            console.log(err)
+            this.loading = false;
+
+              const h = this.$createElement;
+              this.$notify.error({
+                duration: 0,
+                title: 'Error',
+                message: err
+              });
+          }
+        )
 
         // Promise.resolve().then(
         //   () => {
@@ -293,6 +321,12 @@ export default {
               // Failed.
               console.log(err)
               this.loading = false;
+
+              const h = this.$createElement;
+              this.$notify.error({
+                title: 'Error',
+                message: err
+              });
             })
       },
       handleCopyClick(data) {

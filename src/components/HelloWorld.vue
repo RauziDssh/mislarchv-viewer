@@ -100,6 +100,7 @@ var re4 = /(?=https:\/\/drive\.google\.com\/drive\/u\/0\/folders\/).*$/
 var re5 = /(?=https:\/\/docs\.google\.com\/spreadsheets\/d\/).*(?=\/edit)/
 var re6 = /(?=https:\/\/drive\.google\.com\/open\?id=).*$/
 var re7 = /(?=https:\/\/docs\.google\.com\/document\/d\/).*(?=\/edit)/
+var re8 = /(?=https:\/\/drive\.google\.com\/drive\/u\/1\/folders\/).*$/
 
 function findSignature(url) {
   var sig = -1
@@ -110,7 +111,8 @@ function findSignature(url) {
   if(url.match(re5)){sig = url.match(re5)[0].replace(/https:\/\/docs\.google\.com\/spreadsheets\/d\//,"")}
   if(url.match(re6)){sig = url.match(re6)[0].replace(/https:\/\/drive\.google\.com\/open\?id=/,"")}
   if(url.match(re7)){sig = url.match(re7)[0].replace(/https:\/\/docs\.google\.com\/document\/d\//,"")}
-  if(sig == -1) {console.log(url)}
+  if(url.match(re8)){sig = url.match(re8)[0].replace(/https:\/\/drive\.google\.com\/drive\/u\/1\/folders\//,"")}
+  if(sig == -1) {console.log('not matched:' + url)}
   return sig
   // var match1 = url.match(/(?<=https:\/\/drive.google.com\/open\?id=).*$/);
   // var match2 = url.match(/(?<=https:\/\/drive\.google\.com\/drive\/folders\/).*$/);
@@ -160,11 +162,10 @@ function associateCell(__data,__sheet, self){
 
   if(self)
   {
-    console.log(self.cells_not_associated)
     if(self.cells_not_associated.length > 0)
     {
       var names = '<div style="height: 50vh; overflow-y: scroll;">'
-      self.cells_not_associated.forEach(v => {names = names + '<el-tag size="small">・'+ v.name + '<br></el-tag>'})
+      self.cells_not_associated.forEach(v => {names = names + '<a href=' + v.url + '>・' + v.name + '</a><br>'})
       names = names + "</div>"
       const h = self.$createElement;
       self.$notify({
@@ -257,10 +258,20 @@ export default {
         var urls = this.input0.split("\,")
         this.loading = true;
 
+        // var base = 'https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbzAjci2w1he3hHc4RiyG6rzIDqvAGgSGvDUbZpOO71AUqQbK_s0/exec?id=' + findSignature(this.input0)
+        // console.log(base)
+
+        // this.$jsonp('https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbzAjci2w1he3hHc4RiyG6rzIDqvAGgSGvDUbZpOO71AUqQbK_s0/exec?id=' + findSignature(this.input0))
+        // .then((v) => {console.log(v)})
+
+        // this.$jsonp('https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbzAjci2w1he3hHc4RiyG6rzIDqvAGgSGvDUbZpOO71AUqQbK_s0/exec?id=' + findSignature(this.input0))
+        // .then((v) => {console.log(v)})
+
         Promise.all(
           urls.map((__url) => {return this.$jsonp('https://script.google.com/a/mis.doshisha.ac.jp/macros/s/AKfycbyoA-cfZH5dQRltGxIL1SNdiFg9DTRi57Zv81-K1qgP/dev?id=' + findSignature(__url))})
         ).then(msg => 
         {
+          console.log(msg)
           this.loading=false
           var _datas = msg.filter(v => {return v != null}).map(v => {return makeTreeStructure(v).holder})
           _datas.forEach(v => 
